@@ -42,13 +42,15 @@ namespace DanielsWpfCoaster.Windows
         {
             try
             {
-                WindowPlacement wp = _repo.LoadBoundsOrDefault();
-                wp.Length = Marshal.SizeOf(typeof(WindowPlacement));
-                wp.Flags = 0;
-                wp.ShowMode = wp.ShowMode == ShowWindowMode.Minimized ? ShowWindowMode.Normal : wp.ShowMode;
+                WindowPlacement windowPlacement = _repo.LoadBoundsOrDefault();
+                windowPlacement.Length = Marshal.SizeOf<WindowPlacement>();
+                windowPlacement.Flags = 0;
+                windowPlacement.ShowMode = windowPlacement.ShowMode != ShowWindowMode.Maximized
+                    ? ShowWindowMode.Normal
+                    : windowPlacement.ShowMode;
                 var windowHandle = new WindowInteropHelper(this).Handle;
 
-                if (wp.ShowMode == ShowWindowMode.Normal && !wp.NormalBounds.HasArea)
+                if (windowPlacement.ShowMode == ShowWindowMode.Normal && !windowPlacement.NormalBounds.HasArea)
                 {
                     // set default position
                     var workAreaWidth = SystemParameters.WorkArea.Width;
@@ -60,7 +62,7 @@ namespace DanielsWpfCoaster.Windows
                 }
                 else
                 {
-                    NativeMethods.SetWindowPlacement(windowHandle, in wp);
+                    NativeMethods.SetWindowPlacement(windowHandle, in windowPlacement);
                 }
             }
             catch
