@@ -72,7 +72,9 @@ Task("PrepareBuild").IsDependentOn("Clean").Does(() =>
 
 Task("Build").IsDependentOn("PrepareBuild").Does(() =>
 {
-     DotNetBuild(slnPath, settings => settings.SetConfiguration(configuration));
+    MSBuild(slnPath, settings => settings
+        .WithTarget("Rebuild")
+        .SetConfiguration(configuration));
 });
 
 Task("Test").IsDependentOn("Build").Does(() =>
