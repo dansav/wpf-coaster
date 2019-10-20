@@ -74,6 +74,7 @@ Task("Build").IsDependentOn("PrepareBuild").Does(() =>
 {
     MSBuild(slnPath, settings => settings
         .WithTarget("Rebuild")
+        .WithRestore()
         .SetConfiguration(configuration));
 });
 
