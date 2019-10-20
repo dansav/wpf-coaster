@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>DanielWpfCoaster</id>
+    <authors>dansav</authors>
+    <owners>dansav</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>
+      Some basic components for using the MVVM pattern in a WPF application
+    </description>
+    <tags>c# wpf mvvm</tags>
+    <dependencies>
+      <group targetFramework="net46">
+        <dependency id="System.Reactive" version="[4.2,4.3)" />
+      </group>
+      <group targetFramework="netcoreapp3.0">
+        <dependency id="System.Reactive" version="[4.2,4.3)" />
+      </group>
+    </dependencies>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="PresentationCore" targetFramework="net46" />
+    </frameworkAssemblies>
+  </metadata>
+</package>

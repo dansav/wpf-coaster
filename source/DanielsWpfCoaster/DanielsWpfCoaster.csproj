@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <TargetFrameworks>netcoreapp3.0;net46</TargetFrameworks>
+    <UseWPF>true</UseWPF>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\stage\AssemblyVersion.generated.cs" Link="Properties\AssemblyVersion.generated.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Reactive" Version="4.2.0" />
+  </ItemGroup>
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="if not exist $(SolutionDir)stage mkdir $(SolutionDir)stage&#xD;&#xA;if not exist $(SolutionDir)stage\AssemblyVersion.generated.cs echo using System.Reflection; [assembly: AssemblyVersion(&quot;0.0.1.0&quot;)] [assembly: AssemblyFileVersion(&quot;0.0.1.0&quot;)] &gt; $(SolutionDir)stage\AssemblyVersion.generated.cs" />
+  </Target>
+</Project>

@@ -1,0 +1,34 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+  batch: true
+  branches:
+    include:
+    - master
+    - develop
+    - release/*
+
+pool:
+  vmImage: 'windows-2019'
+
+steps:
+- powershell: ./build.ps1
+  displayName: 'Run Cake Build Script'
+  env:
+    NUGET_API_KEY: $(dansav.NugetApiKey)
+- publish: $(System.DefaultWorkingDirectory)/stage
+  artifact: Stage
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'NUnit' # Options: JUnit, NUnit, VSTest, xUnit, cTest
+    testResultsFiles: 'stage/TestResult.xml' 
+    #searchFolder: '$(System.DefaultWorkingDirectory)' # Optional
+    #mergeTestResults: false # Optional
+    failTaskOnFailedTests: true # Optional
+    #testRunTitle: # Optional
+    #buildPlatform: # Optional
+    #buildConfiguration: # Optional
+    #publishRunAttachments: true # Optional  
