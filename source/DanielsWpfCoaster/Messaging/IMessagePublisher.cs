@@ -1,6 +1,6 @@
 using System;
 
-namespace DanielsWpfCoaster
+namespace DanielsWpfCoaster.Messaging
 {
     public interface IMessagePublisher
     {

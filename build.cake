@@ -11,8 +11,6 @@ var configuration = Argument("configuration", "Release");
 // SETUP / TEARDOWN
 ///////////////////////////////////////////////////////////////////////////////
 
-DirectoryPath msbuildInstallationPath;
-FilePath msbuildExePath;
 GitVersion version;
 
 ConvertableDirectoryPath sourceDir;
@@ -24,11 +22,6 @@ FilePath slnPath;
 Setup(ctx =>
 {
     // Executed BEFORE the first task.
-    Information("Running tasks...");
-
-    msbuildInstallationPath = VSWhereLatest(new VSWhereLatestSettings { Requires = "Microsoft.Component.MSBuild" });
-    msbuildExePath = msbuildInstallationPath.CombineWithFilePath("MSBuild/current/Bin/MSBuild.exe");
-
     sourceDir = Directory("./source");
     stageDir = Directory("./stage");
     packageDir = Directory("./stage/package");
@@ -39,6 +32,9 @@ Setup(ctx =>
     {
         UpdateAssemblyInfo = false
     });
+
+    Information($"Version: {version.SemVer}");
+    Information("Running tasks...");
 });
 
 Teardown(ctx =>
@@ -104,8 +100,8 @@ Task("Package").IsDependentOn("Build").Does(() =>
     var settings = new NuGetPackSettings
     {
         Version = version.NuGetVersion,
-        //ProjectUrl = new Uri("https://github.com/dansav/coroutines-for-wpf"),
-        //License = new NuSpecLicense() { Type = "expression", Value = "MIT" },
+        ProjectUrl = new Uri("https://github.com/dansav/wpf-coaster"),
+        License = new NuSpecLicense() { Type = "expression", Value = "MIT" },
         BasePath = packageDir,
         OutputDirectory = publishDir
     };

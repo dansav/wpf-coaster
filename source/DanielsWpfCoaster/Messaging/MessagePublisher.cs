@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 
-namespace DanielsWpfCoaster
+namespace DanielsWpfCoaster.Messaging
 {
     public class MessagePublisher : IMessagePublisher
     {

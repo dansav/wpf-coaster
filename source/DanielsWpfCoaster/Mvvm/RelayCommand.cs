@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Input;
 
-namespace DanielsWpfCoaster
+namespace DanielsWpfCoaster.Mvvm
 {
     public class RelayCommand : ICommand
     {

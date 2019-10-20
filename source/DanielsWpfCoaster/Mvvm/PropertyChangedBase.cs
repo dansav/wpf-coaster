@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace DanielsWpfCoaster
+namespace DanielsWpfCoaster.Mvvm
 {
     public abstract class PropertyChangedBase : INotifyPropertyChanged
     {
