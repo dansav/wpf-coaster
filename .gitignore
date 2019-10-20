@@ -1,0 +1,18 @@
+#folders
+[Bb]in/
+obj/
+_ReSharper*/
+.vs/
+stage/
+
+# files
+Thumbs.db
+*.suo
+*.bak
+*.cache
+*.log
+*.generated.cs
+
+# cake
+/tools/
+!/tools/packages.config
