@@ -28,6 +28,15 @@ namespace DanielsWpfCoaster.Mvvm
             return new AsyncCommand<T>(execute, t => canExecute?.Invoke(t) ?? true);
         }
 
+        public static T ConvertParameter<T>(object value)
+        {
+            if (typeof(T).IsValueType && value == null) return default;
+
+            return value is IConvertible
+                ? (T)Convert.ChangeType(value, typeof(T))
+                : (T)value;
+        }
+
         private class ActionCommand<T> : ICommand
         {
             private readonly Action<T> _execute;
@@ -47,23 +56,12 @@ namespace DanielsWpfCoaster.Mvvm
 
             public bool CanExecute(object parameter)
             {
-                if (typeof(T).IsValueType && parameter == null) return _canExecute(default);
-
-                return parameter is IConvertible
-                    ? _canExecute((T)Convert.ChangeType(parameter, typeof(T)))
-                    : _canExecute((T)parameter);
+                return _canExecute(ConvertParameter<T>(parameter));
             }
 
             public void Execute(object parameter)
             {
-                if (parameter is IConvertible)
-                {
-                    _execute((T)Convert.ChangeType(parameter, typeof(T)));
-                }
-                else
-                {
-                    _execute((T)parameter);
-                }
+                _execute(ConvertParameter<T>(parameter));
             }
         }
         private class AsyncCommand<T> : ICommand
@@ -85,30 +83,18 @@ namespace DanielsWpfCoaster.Mvvm
 
             public bool CanExecute(object parameter)
             {
-                if (typeof(T).IsValueType && parameter == null) return _canExecute(default);
-
-                return parameter is IConvertible
-                    ? _canExecute((T)Convert.ChangeType(parameter, typeof(T)))
-                    : _canExecute((T)parameter);
+                return _canExecute(ConvertParameter<T>(parameter));
             }
 
             public async void Execute(object parameter)
             {
                 try
                 {
-                    if (parameter is IConvertible)
-                    {
-                        await _execute((T)Convert.ChangeType(parameter, typeof(T)));
-                    }
-                    else
-                    {
-                        await _execute((T)parameter);
-                    }
+                    await _execute(ConvertParameter<T>(parameter));
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e);
-                    throw;
                 }
             }
         }
