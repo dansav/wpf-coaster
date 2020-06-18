@@ -76,20 +76,21 @@ Task("Build").IsDependentOn("PrepareBuild").Does(() =>
 
 Task("Test").IsDependentOn("Build").Does(() =>
 {
-    NUnit3($"./**/bin/{configuration}/*.Tests.dll", new NUnit3Settings
+    var settings = new DotNetCoreTestSettings
     {
-        //X86 = true,
-        Results = new[]
-        {
-            new NUnit3Result
-            {
-                FileName = stageDir + File("TestResult.xml")
-            }
-        },
-    });
+        Configuration = configuration,
+        NoBuild = true,
+        VSTestReportPath = stageDir + File("TestResult.xml"),
+    };
+
+    var projectFiles = GetFiles("**/*.Tests.csproj");
+    foreach(var file in projectFiles)
+    {
+        DotNetCoreTest(file.FullPath, settings);
+    }
 });
 
-Task("Package").IsDependentOn("Build").Does(() =>
+Task("Package").IsDependentOn("Test").Does(() =>
 {
     var libDir = packageDir + Directory("lib");
 

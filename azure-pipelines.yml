@@ -23,7 +23,7 @@ steps:
   artifact: Stage
 - task: PublishTestResults@2
   inputs:
-    testResultsFormat: 'NUnit' # Options: JUnit, NUnit, VSTest, xUnit, cTest
+    testResultsFormat: 'VSTest' # Options: JUnit, NUnit, VSTest, xUnit, cTest
     testResultsFiles: 'stage/TestResult.xml' 
     #searchFolder: '$(System.DefaultWorkingDirectory)' # Optional
     #mergeTestResults: false # Optional
