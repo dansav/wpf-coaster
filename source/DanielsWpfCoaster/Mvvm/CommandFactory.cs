@@ -47,7 +47,7 @@ namespace DanielsWpfCoaster.Mvvm
 
             public bool CanExecute(object parameter)
             {
-                if (typeof(T).IsValueType && parameter == null) return false;
+                if (typeof(T).IsValueType && parameter == null) return _canExecute(default);
 
                 return parameter is IConvertible
                     ? _canExecute((T)Convert.ChangeType(parameter, typeof(T)))
@@ -85,7 +85,7 @@ namespace DanielsWpfCoaster.Mvvm
 
             public bool CanExecute(object parameter)
             {
-                if (typeof(T).IsValueType && parameter == null) return false;
+                if (typeof(T).IsValueType && parameter == null) return _canExecute(default);
 
                 return parameter is IConvertible
                     ? _canExecute((T)Convert.ChangeType(parameter, typeof(T)))
