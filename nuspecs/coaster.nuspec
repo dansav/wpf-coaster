@@ -11,10 +11,10 @@
     <tags>c# wpf mvvm</tags>
     <dependencies>
       <group targetFramework="net46">
-        <dependency id="System.Reactive" version="[4.2,4.3)" />
+        <dependency id="System.Reactive" version="[4.2,)" />
       </group>
       <group targetFramework="netcoreapp3.0">
-        <dependency id="System.Reactive" version="[4.2,4.3)" />
+        <dependency id="System.Reactive" version="[4.2,)" />
       </group>
     </dependencies>
     <frameworkAssemblies>
