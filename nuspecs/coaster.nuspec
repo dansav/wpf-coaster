@@ -13,7 +13,7 @@
       <group targetFramework="net46">
         <dependency id="System.Reactive" version="[4.2,)" />
       </group>
-      <group targetFramework="netcoreapp3.0">
+      <group targetFramework="netcoreapp3.1">
         <dependency id="System.Reactive" version="[4.2,)" />
       </group>
     </dependencies>
