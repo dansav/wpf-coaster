@@ -1,0 +1,140 @@
+name: Build and Publish
+
+on:
+  push:
+    branches: [ master, develop ]
+    tags: [ '[0-9]+.[0-9]+.[0-9]+' ]  # Match tags like 0.5.0, 1.0.0, etc.
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+# Explicitly set permissions for security
+permissions:
+  contents: write  # Needed for creating releases
+  pull-requests: read  # Needed for PR checks
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    # Restrict permissions for build job (principle of least privilege)
+    permissions:
+      contents: read
+      pull-requests: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for MinVer to detect version tags
+        filter: tree:0  # Filter to reduce clone size while keeping history
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    
+    - name: Display git information
+      shell: pwsh
+      run: |
+        Write-Host "Current branch: $env:GITHUB_REF"
+        Write-Host "Latest tags:"
+        git tag --sort=-creatordate | Select-Object -First 5
+        Write-Host "Current commit: $(git rev-parse --short HEAD)"
+    
+    - name: Build
+      shell: pwsh
+      run: |
+        .\build.ps1 -Target Package -Configuration Release
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages
+        path: stage/publish/*.nupkg
+        if-no-files-found: error
+    
+    - name: Upload stage directory
+      uses: actions/upload-artifact@v4
+      with:
+        name: stage
+        path: stage/
+        if-no-files-found: warn
+
+  publish:
+    runs-on: windows-latest
+    needs: build
+    # Only publish on tags (X.Y.Z format, allows pre-release suffixes like -beta, -preview)
+    # AND not from a forked repository
+    if: |
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/') &&
+      github.repository == 'dansav/wpf-coaster'
+    # Grant only necessary permissions for publishing
+    permissions:
+      contents: write  # For creating GitHub releases
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: packages
+        path: stage/publish
+    
+    - name: Publish to NuGet.org
+      shell: pwsh
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        # Verify we're not accidentally running on a fork
+        if ($env:GITHUB_REPOSITORY -ne "dansav/wpf-coaster") {
+          Write-Error "This workflow should only run on the official repository!"
+          exit 1
+        }
+        
+        # Check for API key
+        if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
+          Write-Error "NUGET_API_KEY secret is not set. Cannot publish."
+          exit 1
+        }
+        
+        # Find package
+        $package = Get-ChildItem -Path "stage/publish" -Filter "*.nupkg" | Select-Object -First 1
+        
+        if (-not $package) {
+          Write-Error "No package found to publish"
+          exit 1
+        }
+        
+        Write-Host "Publishing $($package.Name) to NuGet.org..."
+        
+        dotnet nuget push $package.FullName `
+          --source "https://api.nuget.org/v3/index.json" `
+          --api-key $env:NUGET_API_KEY `
+          --skip-duplicate
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to publish package"
+          exit $LASTEXITCODE
+        }
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: stage/publish/*.nupkg
+        generate_release_notes: true
+        fail_on_unmatched_files: true
+        prerelease: ${{ contains(github.ref, '-') }}

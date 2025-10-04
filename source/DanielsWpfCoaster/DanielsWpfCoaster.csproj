@@ -1,16 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1;net46</TargetFrameworks>
+    <TargetFrameworks>net8.0-windows;net46</TargetFrameworks>
     <UseWPF>true</UseWPF>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    
+    <!-- Package Information -->
+    <PackageId>DanielsWpfCoaster</PackageId>
+    <Title>DanielsWpfCoaster</Title>
+    <Description>WPF window placement utilities - automatically persist and restore window size, position, and state across application sessions</Description>
+    <Authors>dansav</Authors>
+    <Company>dansav</Company>
+    <PackageTags>wpf window placement position persistence</PackageTags>
+    <PackageProjectUrl>https://github.com/dansav/wpf-coaster</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dansav/wpf-coaster</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    
+    <!-- Generate NuGet package on build -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    
+    <!-- MinVer for git-based versioning -->
+    <MinVerDefaultPreReleaseIdentifiers>preview</MinVerDefaultPreReleaseIdentifiers>
+    <MinVerVerbosity>minimal</MinVerVerbosity>
   </PropertyGroup>
+  
   <ItemGroup>
-    <Compile Include="..\..\stage\AssemblyVersion.generated.cs" Link="Properties\AssemblyVersion.generated.cs" />
+    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="All" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Reactive" Version="4.2.0" />
-  </ItemGroup>
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="if not exist $(SolutionDir)stage mkdir $(SolutionDir)stage&#xD;&#xA;if not exist $(SolutionDir)stage\AssemblyVersion.generated.cs echo using System.Reflection; [assembly: AssemblyVersion(&quot;0.0.1.0&quot;)] [assembly: AssemblyFileVersion(&quot;0.0.1.0&quot;)] &gt; $(SolutionDir)stage\AssemblyVersion.generated.cs" />
-  </Target>
 </Project>

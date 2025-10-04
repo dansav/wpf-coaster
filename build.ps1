@@ -1,258 +1,257 @@
-##########################################################################
-# This is the Cake bootstrapper script for PowerShell.
-# This file was downloaded from https://github.com/cake-build/resources
-# Feel free to change this file to fit your needs.
-##########################################################################
-
+#!/usr/bin/env pwsh
 <#
-
 .SYNOPSIS
-This is a Powershell script to bootstrap a Cake build.
+    Build script for DanielsWpfCoaster
 
 .DESCRIPTION
-This Powershell script will download NuGet if missing, restore NuGet tools (including Cake)
-and execute your Cake build script with the parameters you provide.
+    This script builds the project, runs tests (if any), and creates NuGet packages.
+    Version is determined from git tags (e.g., v1.2.3).
 
-.PARAMETER Script
-The build script to execute.
-.PARAMETER Target
-The build script target to run.
 .PARAMETER Configuration
-The build configuration to use.
-.PARAMETER Verbosity
-Specifies the amount of information to be displayed.
-.PARAMETER ShowDescription
-Shows description about tasks.
-.PARAMETER DryRun
-Performs a dry run.
-.PARAMETER SkipToolPackageRestore
-Skips restoring of packages.
-.PARAMETER ScriptArgs
-Remaining arguments are added here.
+    Build configuration (Debug or Release). Default: Release
 
-.LINK
-https://cakebuild.net
+.PARAMETER Target
+    Build target: Clean, Build, Test, Package, or Publish. Default: Package
 
+.PARAMETER SkipClean
+    Skip the clean step
+
+.PARAMETER NuGetApiKey
+    NuGet API key for publishing (can also be set via NUGET_API_KEY environment variable)
+
+.EXAMPLE
+    .\build.ps1
+    .\build.ps1 -Configuration Debug
+    .\build.ps1 -Target Publish -NuGetApiKey "your-key"
 #>
 
 [CmdletBinding()]
-Param(
-    [string]$Script = "build.cake",
-    [string]$Target,
-    [string]$Configuration,
-    [ValidateSet("Quiet", "Minimal", "Normal", "Verbose", "Diagnostic")]
-    [string]$Verbosity,
-    [switch]$ShowDescription,
-    [Alias("WhatIf", "Noop")]
-    [switch]$DryRun,
-    [switch]$SkipToolPackageRestore,
-    [Parameter(Position=0,Mandatory=$false,ValueFromRemainingArguments=$true)]
-    [string[]]$ScriptArgs
+param(
+    [Parameter()]
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release',
+
+    [Parameter()]
+    [ValidateSet('Clean', 'Build', 'Test', 'Package', 'Publish')]
+    [string]$Target = 'Package',
+
+    [Parameter()]
+    [switch]$SkipClean,
+
+    [Parameter()]
+    [string]$NuGetApiKey = $env:NUGET_API_KEY
 )
 
-# Attempt to set highest encryption available for SecurityProtocol.
-# PowerShell will not set this by default (until maybe .NET 4.6.x). This
-# will typically produce a message for PowerShell v2 (just an info
-# message though)
-try {
-    # Set TLS 1.2 (3072), then TLS 1.1 (768), then TLS 1.0 (192), finally SSL 3.0 (48)
-    # Use integers because the enumeration values for TLS 1.2 and TLS 1.1 won't
-    # exist in .NET 4.0, even though they are addressable if .NET 4.5+ is
-    # installed (.NET 4.5 is an in-place upgrade).
-    # PowerShell Core already has support for TLS 1.2 so we can skip this if running in that.
-    if (-not $IsCoreCLR) {
-        [System.Net.ServicePointManager]::SecurityProtocol = 3072 -bor 768 -bor 192 -bor 48
-    }
-  } catch {
-    Write-Output 'Unable to set PowerShell to use TLS 1.2 and TLS 1.1 due to old .NET Framework installed. If you see underlying connection closed or trust errors, you may need to upgrade to .NET Framework 4.5+ and PowerShell v3'
-  }
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
-[Reflection.Assembly]::LoadWithPartialName("System.Security") | Out-Null
-function MD5HashFile([string] $filePath)
-{
-    if ([string]::IsNullOrEmpty($filePath) -or !(Test-Path $filePath -PathType Leaf))
-    {
-        return $null
-    }
+# Paths
+$RootDir = $PSScriptRoot
+$SourceDir = Join-Path $RootDir "source"
+$StageDir = Join-Path $RootDir "stage"
+$PackageDir = Join-Path $StageDir "package"
+$PublishDir = Join-Path $StageDir "publish"
+$SolutionFile = Join-Path $RootDir "DanielsWpfCoaster.sln"
+$ProjectFile = Join-Path $SourceDir "DanielsWpfCoaster\DanielsWpfCoaster.csproj"
 
-    [System.IO.Stream] $file = $null;
-    [System.Security.Cryptography.MD5] $md5 = $null;
-    try
-    {
-        $md5 = [System.Security.Cryptography.MD5]::Create()
-        $file = [System.IO.File]::OpenRead($filePath)
-        return [System.BitConverter]::ToString($md5.ComputeHash($file))
+# Functions
+function Write-Banner {
+    param([string]$Message)
+    
+    $line = "=" * 80
+    Write-Host ""
+    Write-Host $line -ForegroundColor Cyan
+    Write-Host "  $Message" -ForegroundColor Cyan
+    Write-Host $line -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Invoke-CleanTask {
+    Write-Banner "CLEAN"
+    
+    # Clean bin/obj directories
+    Get-ChildItem -Path $SourceDir -Include bin,obj -Recurse -Directory | 
+        Where-Object { $_.FullName -like "*\$Configuration" -or $_.Name -eq 'obj' } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # Clean stage directory
+    if (Test-Path $StageDir) {
+        Remove-Item $StageDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-    finally
-    {
-        if ($file -ne $null)
-        {
-            $file.Dispose()
+    
+    # Recreate stage directories
+    New-Item -ItemType Directory -Path $PackageDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $PublishDir -Force | Out-Null
+    
+    Write-Host "✓ Clean completed" -ForegroundColor Green
+}
+
+function Invoke-BuildTask {
+    Write-Banner "BUILD"
+    
+    Write-Host "Configuration: $Configuration" -ForegroundColor Cyan
+    Write-Host "MinVer will determine version from git tags" -ForegroundColor Cyan
+    Write-Host ""
+    
+    # Build the solution - MinVer will handle versioning
+    $buildArgs = @(
+        $SolutionFile,
+        "/t:Restore;Rebuild",
+        "/p:Configuration=$Configuration",
+        "/m",
+        "/v:minimal"
+    )
+    
+    & dotnet msbuild @buildArgs
+    
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build failed with exit code $LASTEXITCODE"
+    }
+    
+    Write-Host "✓ Build completed" -ForegroundColor Green
+}
+
+function Invoke-TestTask {
+    Write-Banner "TEST"
+    
+    # Find test projects
+    $testProjects = @(Get-ChildItem -Path $SourceDir -Filter "*.Tests.csproj" -Recurse -ErrorAction SilentlyContinue)
+    
+    if ($testProjects.Count -eq 0) {
+        Write-Host "No test projects found. Skipping tests." -ForegroundColor Yellow
+        return
+    }
+    
+    foreach ($testProject in $testProjects) {
+        Write-Host "Running tests in $($testProject.Name)..." -ForegroundColor Cyan
+        
+        dotnet test $testProject.FullName `
+            --configuration $Configuration `
+            --no-build `
+            --logger "trx;LogFileName=TestResult.xml" `
+            --results-directory $StageDir
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tests failed with exit code $LASTEXITCODE"
         }
     }
-}
-
-function GetProxyEnabledWebClient
-{
-    $wc = New-Object System.Net.WebClient
-    $proxy = [System.Net.WebRequest]::GetSystemWebProxy()
-    $proxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
-    $wc.Proxy = $proxy
-    return $wc
-}
-
-Write-Host "Preparing to run build script..."
-
-if(!$PSScriptRoot){
-    $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent
-}
-
-$TOOLS_DIR = Join-Path $PSScriptRoot "tools"
-$ADDINS_DIR = Join-Path $TOOLS_DIR "Addins"
-$MODULES_DIR = Join-Path $TOOLS_DIR "Modules"
-$NUGET_EXE = Join-Path $TOOLS_DIR "nuget.exe"
-$CAKE_EXE = Join-Path $TOOLS_DIR "Cake/Cake.exe"
-$NUGET_URL = "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe"
-$PACKAGES_CONFIG = Join-Path $TOOLS_DIR "packages.config"
-$PACKAGES_CONFIG_MD5 = Join-Path $TOOLS_DIR "packages.config.md5sum"
-$ADDINS_PACKAGES_CONFIG = Join-Path $ADDINS_DIR "packages.config"
-$MODULES_PACKAGES_CONFIG = Join-Path $MODULES_DIR "packages.config"
-
-# Make sure tools folder exists
-if ((Test-Path $PSScriptRoot) -and !(Test-Path $TOOLS_DIR)) {
-    Write-Verbose -Message "Creating tools directory..."
-    New-Item -Path $TOOLS_DIR -Type Directory | Out-Null
-}
-
-# Make sure that packages.config exist.
-if (!(Test-Path $PACKAGES_CONFIG)) {
-    Write-Verbose -Message "Downloading packages.config..."
-    try {
-        $wc = GetProxyEnabledWebClient
-        $wc.DownloadFile("https://cakebuild.net/download/bootstrapper/packages", $PACKAGES_CONFIG)
-    } catch {
-        Throw "Could not download packages.config."
-    }
-}
-
-# Try find NuGet.exe in path if not exists
-if (!(Test-Path $NUGET_EXE)) {
-    Write-Verbose -Message "Trying to find nuget.exe in PATH..."
-    $existingPaths = $Env:Path -Split ';' | Where-Object { (![string]::IsNullOrEmpty($_)) -and (Test-Path $_ -PathType Container) }
-    $NUGET_EXE_IN_PATH = Get-ChildItem -Path $existingPaths -Filter "nuget.exe" | Select -First 1
-    if ($NUGET_EXE_IN_PATH -ne $null -and (Test-Path $NUGET_EXE_IN_PATH.FullName)) {
-        Write-Verbose -Message "Found in PATH at $($NUGET_EXE_IN_PATH.FullName)."
-        $NUGET_EXE = $NUGET_EXE_IN_PATH.FullName
-    }
-}
-
-# Try download NuGet.exe if not exists
-if (!(Test-Path $NUGET_EXE)) {
-    Write-Verbose -Message "Downloading NuGet.exe..."
-    try {
-        $wc = GetProxyEnabledWebClient
-        $wc.DownloadFile($NUGET_URL, $NUGET_EXE)
-    } catch {
-        Throw "Could not download NuGet.exe."
-    }
-}
-
-# Save nuget.exe path to environment to be available to child processed
-$env:NUGET_EXE = $NUGET_EXE
-$env:NUGET_EXE_INVOCATION = if ($IsLinux -or $IsMacOS) {
-    "mono `"$NUGET_EXE`""
-} else {
-    "`"$NUGET_EXE`""
-}
-
-# Restore tools from NuGet?
-if(-Not $SkipToolPackageRestore.IsPresent) {
-    Push-Location
-    Set-Location $TOOLS_DIR
-
-    # Check for changes in packages.config and remove installed tools if true.
-    [string] $md5Hash = MD5HashFile $PACKAGES_CONFIG
-    if((!(Test-Path $PACKAGES_CONFIG_MD5)) -Or
-    ($md5Hash -ne (Get-Content $PACKAGES_CONFIG_MD5 ))) {
-        Write-Verbose -Message "Missing or changed package.config hash..."
-        Get-ChildItem -Exclude packages.config,nuget.exe,Cake.Bakery |
-        Remove-Item -Recurse -Force
-    }
-
-    Write-Verbose -Message "Restoring tools from NuGet..."
     
-    $NuGetOutput = Invoke-Expression "& $env:NUGET_EXE_INVOCATION install -ExcludeVersion -OutputDirectory `"$TOOLS_DIR`""
+    Write-Host "✓ Tests completed" -ForegroundColor Green
+}
 
+function Invoke-PackageTask {
+    Write-Banner "PACKAGE"
+    
+    Write-Host "Creating NuGet package (version from MinVer)..." -ForegroundColor Cyan
+    
+    # Use dotnet pack - MinVer will set the version
+    dotnet pack $ProjectFile `
+        --configuration $Configuration `
+        --no-build `
+        --output $PublishDir
+    
     if ($LASTEXITCODE -ne 0) {
-        Throw "An error occurred while restoring NuGet tools."
+        throw "Pack failed with exit code $LASTEXITCODE"
     }
-    else
-    {
-        $md5Hash | Out-File $PACKAGES_CONFIG_MD5 -Encoding "ASCII"
+    
+    # List created packages
+    $packages = Get-ChildItem -Path $PublishDir -Filter "*.nupkg"
+    Write-Host ""
+    Write-Host "Created packages:" -ForegroundColor Green
+    foreach ($package in $packages) {
+        Write-Host "  - $($package.Name)" -ForegroundColor White
     }
-    Write-Verbose -Message ($NuGetOutput | Out-String)
-
-    Pop-Location
+    
+    Write-Host "✓ Package completed" -ForegroundColor Green
 }
 
-# Restore addins from NuGet
-if (Test-Path $ADDINS_PACKAGES_CONFIG) {
-    Push-Location
-    Set-Location $ADDINS_DIR
-
-    Write-Verbose -Message "Restoring addins from NuGet..."
-    $NuGetOutput = Invoke-Expression "& $env:NUGET_EXE_INVOCATION install -ExcludeVersion -OutputDirectory `"$ADDINS_DIR`""
-
+function Invoke-PublishTask {
+    Write-Banner "PUBLISH"
+    
+    if ([string]::IsNullOrWhiteSpace($NuGetApiKey)) {
+        Write-Warning "NuGet API key not provided. Skipping publish."
+        Write-Host "Set NUGET_API_KEY environment variable or use -NuGetApiKey parameter" -ForegroundColor Yellow
+        return
+    }
+    
+    # Check if we're on a release tag (not a pre-release)
+    $package = Get-ChildItem -Path $PublishDir -Filter "*.nupkg" | Where-Object { $_.Name -notmatch "preview|alpha|beta|rc" } | Select-Object -First 1
+    
+    if (-not $package) {
+        Write-Warning "No release package found (only pre-release packages). Skipping publish to nuget.org"
+        Write-Host "Pre-release packages are not automatically published to nuget.org" -ForegroundColor Yellow
+        Write-Host "Create a release git tag (e.g., 'git tag 1.0.0') to publish a release version" -ForegroundColor Yellow
+        return
+    }
+    
+    Write-Host "Publishing $($package.Name) to NuGet.org..." -ForegroundColor Cyan
+    
+    dotnet nuget push $package.FullName `
+        --source "https://api.nuget.org/v3/index.json" `
+        --api-key $NuGetApiKey `
+        --skip-duplicate
+    
     if ($LASTEXITCODE -ne 0) {
-        Throw "An error occurred while restoring NuGet addins."
+        throw "Publish failed with exit code $LASTEXITCODE"
     }
-
-    Write-Verbose -Message ($NuGetOutput | Out-String)
-
-    Pop-Location
+    
+    Write-Host "✓ Publish completed" -ForegroundColor Green
 }
 
-# Restore modules from NuGet
-if (Test-Path $MODULES_PACKAGES_CONFIG) {
-    Push-Location
-    Set-Location $MODULES_DIR
-
-    Write-Verbose -Message "Restoring modules from NuGet..."
-    $NuGetOutput = Invoke-Expression "& $env:NUGET_EXE_INVOCATION install -ExcludeVersion -OutputDirectory `"$MODULES_DIR`""
-
-    if ($LASTEXITCODE -ne 0) {
-        Throw "An error occurred while restoring NuGet modules."
+# Main execution
+try {
+    Write-Host ""
+    Write-Host "╔════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
+    Write-Host "║                        DanielsWpfCoaster Build Script                          ║" -ForegroundColor Magenta
+    Write-Host "╚════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+    Write-Host ""
+    
+    Write-Host "Build Information:" -ForegroundColor Cyan
+    Write-Host "  Configuration: $Configuration" -ForegroundColor White
+    Write-Host "  Target: $Target" -ForegroundColor White
+    Write-Host "  Versioning: MinVer (git tag-based)" -ForegroundColor White
+    
+    # Execute tasks based on target
+    if (-not $SkipClean -and $Target -ne 'Clean') {
+        Invoke-CleanTask
     }
-
-    Write-Verbose -Message ($NuGetOutput | Out-String)
-
-    Pop-Location
+    
+    switch ($Target) {
+        'Clean' {
+            Invoke-CleanTask
+        }
+        'Build' {
+            Invoke-BuildTask
+        }
+        'Test' {
+            Invoke-BuildTask
+            Invoke-TestTask
+        }
+        'Package' {
+            Invoke-BuildTask
+            Invoke-TestTask
+            Invoke-PackageTask
+        }
+        'Publish' {
+            Invoke-BuildTask
+            Invoke-TestTask
+            Invoke-PackageTask
+            Invoke-PublishTask
+        }
+    }
+    
+    Write-Host ""
+    Write-Host "════════════════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host "  ✓ BUILD SUCCEEDED" -ForegroundColor Green
+    Write-Host "════════════════════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host ""
 }
-
-# Make sure that Cake has been installed.
-if (!(Test-Path $CAKE_EXE)) {
-    Throw "Could not find Cake.exe at $CAKE_EXE"
+catch {
+    Write-Host ""
+    Write-Host "════════════════════════════════════════════════════════════════════════════════" -ForegroundColor Red
+    Write-Host "  ✗ BUILD FAILED" -ForegroundColor Red
+    Write-Host "════════════════════════════════════════════════════════════════════════════════" -ForegroundColor Red
+    Write-Host ""
+    Write-Error $_
+    exit 1
 }
-
-$CAKE_EXE_INVOCATION = if ($IsLinux -or $IsMacOS) {
-    "mono `"$CAKE_EXE`""
-} else {
-    "`"$CAKE_EXE`""
-}
-
-# Build Cake arguments
-$cakeArguments = ""
-If ($Script) {
-    $cakeArguments += @("`"$Script`"");
-}
-if ($Target) { $cakeArguments += "-target=`"$Target`"" }
-if ($Configuration) { $cakeArguments += "-configuration=$Configuration" }
-if ($Verbosity) { $cakeArguments += "-verbosity=$Verbosity" }
-if ($ShowDescription) { $cakeArguments += "-showdescription" }
-if ($DryRun) { $cakeArguments += "-dryrun" }
-$cakeArguments += $ScriptArgs
-
-# Start Cake
-Write-Host "Running build script..."
-Invoke-Expression "& $CAKE_EXE_INVOCATION $($cakeArguments -join " ")"
-exit $LASTEXITCODE
